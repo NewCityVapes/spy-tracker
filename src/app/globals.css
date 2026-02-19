@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap');
+
+:root {
+  --bg: #060a0e;
+  --bg2: #0b1018;
+  --bg3: #111820;
+  --bg4: #182030;
+  --border: #1a2535;
+  --border2: #243040;
+  --green: #00e5a0;
+  --green2: #00b87d;
+  --red: #ff3d5a;
+  --yellow: #ffc840;
+  --blue: #2196f3;
+  --orange: #ff7043;
+  --text: #dce8f5;
+  --text2: #7a9bb5;
+  --text3: #3d5870;
+  --mono: 'JetBrains Mono', monospace;
+  --display: 'Bebas Neue', cursive;
+  --body: 'DM Sans', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+input, select, textarea, button { font-family: inherit; }
+input[type="number"]::-webkit-inner-spin-button { opacity: 0.3; }
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fadeIn 0.3s ease; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.pulse { animation: pulse 2s infinite; }
