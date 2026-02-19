@@ -76,7 +76,7 @@ function calcStats(trades) {
   return { total, wins: wins.length, losses: losses.length, wr, totalPnl, avgWin, avgLoss, pf, exp, kelly, maxDd, maxW, maxL, compliance, wrComp, wrBroken, compCount: compT.length, brokenCount: brokenT.length }
 }
 
-// ── UI Primitives ──────────────────────────────────────────────
+// ── UI Primitive ──────────────────────────────────────────────
 const s = {
   bg:'#060a0e',bg2:'#0b1018',bg3:'#111820',border:'#1a2535',border2:'#243040',
   green:'#00e5a0',red:'#ff3d5a',yellow:'#ffc840',blue:'#2196f3',orange:'#ff7043',
