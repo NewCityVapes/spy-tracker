@@ -181,25 +181,22 @@ function TradeModal({ trade, onSave, onClose, saving }) {
     const stop   = parseFloat(k === 'stop'   ? v : updated.stop)
     const exit   = parseFloat(k === 'exit'   ? v : updated.exit)
     const shares = parseFloat(k === 'shares' ? v : updated.shares)
-    const dir    = k === 'dir' ? v : updated.dir
+    
 
     // P&L: (exit - entry) * shares, flipped for SHORT
     if (!isNaN(entry) && !isNaN(exit) && !isNaN(shares) && shares > 0) {
-      const rawPnl = dir === 'SHORT'
-        ? (entry - exit) * shares
-        : (exit - entry) * shares
-      updated.pnl = rawPnl.toFixed(2)
+      const rawPnl = (exit - entry) * shares
+updated.pnl = rawPnl.toFixed(2)
+
     }
 
     // R:R Achieved: how many R's did you make/lose?
     // R = distance from entry to stop (risk per share)
     if (!isNaN(entry) && !isNaN(stop) && !isNaN(exit) && stop !== entry) {
       const riskPerShare = Math.abs(entry - stop)
-      const gainPerShare = dir === 'SHORT'
-        ? (entry - exit)
-        : (exit - entry)
-      const rr = gainPerShare / riskPerShare
-      updated.rr = rr.toFixed(2) + 'R'
+     const gainPerShare = (exit - entry)
+const rr = gainPerShare / riskPerShare
+updated.rr = rr.toFixed(2) + 'R'
     }
 
     // Auto-set outcome based on P&L
