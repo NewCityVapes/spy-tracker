@@ -4,7 +4,7 @@ import { useTracker } from '../hooks/useTracker'
 
 // ── Constants ─────────────────────────────────────────────────
 const SETUPS = ['Buy the Dip','Overextension Fade','Support Bounce','Other']
-const DAY_TYPES = ['Trend','Chop','Reversal']
+const DAY_TYPES = ['UpTrend','DownTrend','Chop']
 const EMOTIONS = ['Calm','FOMO','Anxious','Revenge','Confident','Greedy']
 const TABS = ['Dashboard','Journal','Stats','Pre-Market','Checklist','Setups','Risk Calc']
 const CL_NEWS = ['Check major econ data today (CPI, FOMC, NFP, PPI)','Check for Fed speakers scheduled','Note geopolitical headlines moving futures','What did SPY do yesterday?','Check ES futures direction and premarket level']
