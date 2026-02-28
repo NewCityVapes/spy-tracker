@@ -328,13 +328,9 @@ function TradeModal({ trade, onSave, onClose, saving }) {
               marginBottom: 12,
             }}
           >
-            {SL('Setup', 'setup', SETUPS)}
-            {SL('Day Type', 'dayType', DAY_TYPES)}
-            {SL('Outcome', 'outcome', [
-              { v: 'win', l: 'Win' },
-              { v: 'loss', l: 'Loss' },
-              { v: 'be', l: 'Break Even' },
-            ])}
+          {SL('Setup', 'setup', SETUPS)}
+{SL('Day Type', 'dayType', DAY_TYPES)}
+{SL('Emotion', 'emotion', EMOTIONS)}
           </div>
 
           {/* Row 3: Entry / Stop / Exit / Shares */}
@@ -464,11 +460,15 @@ function TradeModal({ trade, onSave, onClose, saving }) {
               <Inp value={f.rr || ''} onChange={(e) => set('rr', e.target.value)} />
             </div>
             {SL('Rules Followed?', 'rules', [
-              { v: 'yes', l: 'Yes' },
-              { v: 'no', l: 'No' },
-              { v: 'partial', l: 'Partial' },
-            ])}
-            {SL('Emotion', 'emotion', EMOTIONS)}
+  { v: 'yes', l: 'Yes' },
+  { v: 'no', l: 'No' },
+  { v: 'partial', l: 'Partial' },
+])}
+{SL('Outcome', 'outcome', [
+  { v: 'win', l: 'Win' },
+  { v: 'loss', l: 'Loss' },
+  { v: 'be', l: 'Break Even' },
+])}
           </div>
 
           {/* Notes */}
