@@ -6,7 +6,7 @@ import { useTracker } from '../hooks/useTracker'
 const SETUPS = ['Buy the Dip','Overextension Fade','Support Bounce','Other']
 const DAY_TYPES = ['UpTrend','DownTrend','Chop']
 const EMOTIONS = ['Calm','FOMO','Anxious','Revenge','Confident','Greedy']
-const TABS = ['Dashboard','Journal','Stats','Pre-Market','Checklist','Setups','Risk Calc']
+const TABS = ['Dashboard','Journal','Stats','Pre-Market','Checklist','Setups','Risk Calc','Gatekeeper']
 const CL_NEWS = ['Check major econ data today (CPI, FOMC, NFP, PPI)','Check for Fed speakers scheduled','Note geopolitical headlines moving futures','What did SPY do yesterday?','Check ES futures direction and premarket level']
 const CL_CHART = ['Mark Prior Day High (PDH)','Mark Prior Day Low (PDL)','Mark Prior Day Close','Mark Premarket High','Mark Premarket Low','Mark overnight consolidation zones','Mark round numbers near current price','VWAP, 9 EMA, 20 EMA confirmed on chart','15m, 5m, 1m charts open and ready']
 const CL_MENTAL = ['Write directional bias for today','Write max loss in dollars','Write setups looking for today','Assess mental state — tired? anxious? distracted?','Commit: No trades before 9:55am','Commit: Take stop loss without hesitation','Commit: No revenge trading after a loss']
@@ -31,6 +31,30 @@ const TIME_SLOTS = [
 ]
 
 const BLANK = {id:'',date:'',time:'',dir:'LONG',setup:'',dayType:'',outcome:'',entry:'',stop:'',exit:'',shares:'',pnl:'',rr:'',rules:'yes',emotion:'',good:'',improve:''}
+
+// ── Gatekeeper Constants ──────────────────────────────────────
+const MAX_GATE_TRADES = 4
+const MAX_CONSEC_LOSSES = 3
+
+const GATE_RULES = [
+  { id: 'g_m5conf', label: 'M5/M1 EMA confluence confirmed', cat: 'ENTRY' },
+  { id: 'g_3candle', label: 'Waited for 3-candle confirmation on M5', cat: 'ENTRY' },
+  { id: 'g_trend', label: 'Trade is WITH the trend — not counter-trend', cat: 'DIRECTION' },
+  { id: 'g_setup', label: 'This is a defined setup (Dip Buy, Support Bounce, etc.)', cat: 'SETUP' },
+  { id: 'g_nofade', label: 'NOT fading an overextension without key level', cat: 'SETUP' },
+  { id: 'g_level', label: 'Entry near a key level (EMA, VWAP, ONH/L, PDH/L, POC)', cat: 'CONFLUENCE' },
+  { id: 'g_size', label: 'Position size is appropriate — not oversized for revenge/greed', cat: 'RISK' },
+  { id: 'g_stop', label: 'Stop loss defined BEFORE entry', cat: 'RISK' },
+]
+
+const GATE_EMOTIONS = [
+  { id: 'confident', label: 'Confident', icon: '🎯', safe: true },
+  { id: 'calm', label: 'Calm', icon: '🧘', safe: true },
+  { id: 'anxious', label: 'Anxious', icon: '😰', safe: false, warn: 'Your data: 47% WR when anxious. Often leads to paper-handing winners. Are you sure?' },
+  { id: 'fomo', label: 'FOMO', icon: '🔥', safe: false, warn: 'Your data: FOMO trades = 40% WR, -$2,650 total. The best trade is the one you don\'t chase.' },
+  { id: 'revenge', label: 'Revenge', icon: '💢', safe: false, warn: 'Your data: Revenge trades net -$115 with massive variance. Losses cascade. You know the pattern.' },
+  { id: 'greedy', label: 'Greedy', icon: '🤑', safe: false, warn: 'Your data: 8% win rate when Greedy. -$14,967 total. Every blowup in your journal has this label.' },
+]
 
 // ── Utils ──────────────────────────────────────────────────────
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
@@ -178,22 +202,16 @@ function TradeModal({ trade, onSave, onClose, saving }) {
     setF((p) => {
       const updated = { ...p, [k]: v }
 
-      // Auto-calculate P&L and R:R whenever relevant fields change
       const entry = parseFloat(k === 'entry' ? v : updated.entry)
       const stop = parseFloat(k === 'stop' ? v : updated.stop)
       const exit = parseFloat(k === 'exit' ? v : updated.exit)
       const shares = parseFloat(k === 'shares' ? v : updated.shares)
 
-      // ✅ P&L: ALWAYS treat as LONG
-      // P&L = (exit - entry) * shares
       if (!isNaN(entry) && !isNaN(exit) && !isNaN(shares) && shares > 0) {
         const rawPnl = (exit - entry) * shares
         updated.pnl = rawPnl.toFixed(2)
       }
 
-      // ✅ R:R Achieved: ALWAYS treat as LONG
-      // R = abs(entry - stop)
-      // R:R = (exit - entry) / R
       if (!isNaN(entry) && !isNaN(stop) && !isNaN(exit) && stop !== entry) {
         const riskPerShare = Math.abs(entry - stop)
         const gainPerShare = exit - entry
@@ -201,7 +219,6 @@ function TradeModal({ trade, onSave, onClose, saving }) {
         updated.rr = rr.toFixed(2) + 'R'
       }
 
-      // Auto-set outcome based on P&L
       if (updated.pnl !== '' && !isNaN(Number(updated.pnl))) {
         const pnlNum = Number(updated.pnl)
         if (pnlNum > 0) updated.outcome = 'win'
@@ -241,7 +258,6 @@ function TradeModal({ trade, onSave, onClose, saving }) {
     </div>
   )
 
-  // Derived display values for the auto-calc preview
   const hasAutoCalc = f.pnl !== '' && f.rr !== ''
   const pnlNum = Number(f.pnl)
 
@@ -270,7 +286,6 @@ function TradeModal({ trade, onSave, onClose, saving }) {
         }}
         className="fade-in"
       >
-        {/* Header */}
         <div
           style={{
             display: 'flex',
@@ -305,7 +320,6 @@ function TradeModal({ trade, onSave, onClose, saving }) {
         </div>
 
         <div style={{ padding: 22 }}>
-          {/* Row 1: Date / Time / Direction */}
           <div
             style={{
               display: 'grid',
@@ -319,7 +333,6 @@ function TradeModal({ trade, onSave, onClose, saving }) {
             {SL('Direction', 'dir', ['LONG', 'SHORT'])}
           </div>
 
-          {/* Row 2: Setup / Day Type / Outcome */}
           <div
             style={{
               display: 'grid',
@@ -333,7 +346,6 @@ function TradeModal({ trade, onSave, onClose, saving }) {
 {SL('Emotion', 'emotion', EMOTIONS)}
           </div>
 
-          {/* Row 3: Entry / Stop / Exit / Shares */}
           <div
             style={{
               display: 'grid',
@@ -357,7 +369,6 @@ function TradeModal({ trade, onSave, onClose, saving }) {
             {F('Shares / Qty', 'shares', 'number', { placeholder: '100' })}
           </div>
 
-          {/* Auto-calc display banner */}
           {hasAutoCalc && (
             <div
               style={{
@@ -432,7 +443,6 @@ function TradeModal({ trade, onSave, onClose, saving }) {
             </div>
           )}
 
-          {/* Row 4: P&L / R:R (manual override still possible) */}
           <div
             style={{
               display: 'grid',
@@ -471,7 +481,6 @@ function TradeModal({ trade, onSave, onClose, saving }) {
 ])}
           </div>
 
-          {/* Notes */}
           {[
             ['What did you do well?', 'good', 'Entry confirmation, took stop cleanly...'],
             [
@@ -511,7 +520,6 @@ function TradeModal({ trade, onSave, onClose, saving }) {
           ))}
         </div>
 
-        {/* Footer */}
         <div
           style={{
             display: 'flex',
@@ -570,6 +578,14 @@ export default function App() {
   const [openSetup, setOpenSetup] = useState(null)
   const [rc, setRc] = useState({ account: '', pct: '1', entry: '', stop: '', t1: '', t2: '', t3: '' })
 
+  // ── Gatekeeper state ─────────────────────────────────────
+  const [gatePhase, setGatePhase] = useState('idle') // idle | checklist | warning | approved | rejected
+  const [gateChecked, setGateChecked] = useState({})
+  const [gateEmotion, setGateEmotion] = useState(null)
+  const [gateNotes, setGateNotes] = useState('')
+  const [gateApprovals, setGateApprovals] = useState([]) // session approvals today
+  const [gateWarning, setGateWarning] = useState(null)
+
   useEffect(() => {
     const i = setInterval(() => setClk(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })), 1000)
     return () => clearInterval(i)
@@ -606,6 +622,70 @@ export default function App() {
 
   function calcAllStats(t) { return calcStats(t) }
 
+  // ── Gatekeeper derived state ─────────────────────────────
+  const gateTradeCount = todayTrades.length
+  const gateConsecLosses = (() => {
+    const sorted = [...todayTrades].sort((a, b) => {
+      if (a.date !== b.date) return a.date > b.date ? 1 : -1
+      return (a.time || '') > (b.time || '') ? 1 : -1
+    })
+    let cl = 0
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (sorted[i].outcome === 'loss') cl++
+      else break
+    }
+    return cl
+  })()
+  const gateLocked = gateTradeCount >= MAX_GATE_TRADES
+  const gateLossLocked = gateConsecLosses >= MAX_CONSEC_LOSSES
+  const gateIsLocked = gateLocked || gateLossLocked
+  const gateAllChecked = GATE_RULES.every(r => gateChecked[r.id])
+  const gateEmoObj = GATE_EMOTIONS.find(e => e.id === gateEmotion)
+  const gateDangerEmo = gateEmoObj && !gateEmoObj.safe
+  const gateRemaining = MAX_GATE_TRADES - gateTradeCount
+
+  const gateStartChecklist = () => {
+    if (gateIsLocked) return
+    setGateChecked({})
+    setGateEmotion(null)
+    setGateNotes('')
+    setGateWarning(null)
+    setGatePhase('checklist')
+  }
+
+  const gateToggleRule = (id) => {
+    setGateChecked(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  const gateHandleApprove = () => {
+    if (!gateAllChecked || !gateEmotion) return
+    if (gateDangerEmo) {
+      setGateWarning(gateEmoObj)
+      setGatePhase('warning')
+      return
+    }
+    gateCommit()
+  }
+
+  const gateCommit = () => {
+    const approval = {
+      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      emotion: gateEmotion,
+      notes: gateNotes,
+    }
+    setGateApprovals(prev => [...prev, approval])
+    setGatePhase('approved')
+    showToast('Trade approved — execute now ✓')
+  }
+
+  const gateReset = () => {
+    setGatePhase('idle')
+    setGateChecked({})
+    setGateEmotion(null)
+    setGateNotes('')
+    setGateWarning(null)
+  }
+
   // Filters & sort
   const filtered = trades.filter(t => {
     if (filters.setup && t.setup !== filters.setup) return false
@@ -626,7 +706,7 @@ export default function App() {
 
   // Checklist helpers
   const pmChk = (group, i) => !!(checklists[today] && checklists[today][group] && checklists[today][group][i])
-  const tcChk = (group, i) => pmChk(group, i) // reusing same structure, prefixed by "tc_"
+  const tcChk = (group, i) => pmChk(group, i)
   const pmToggle = (group, i) => toggleChecklist(today, group, i)
   const tcToggle = (group, i) => toggleChecklist(today, 'tc_' + group, i)
   const tcChkFn = (group, i) => !!(checklists[today] && checklists[today]['tc_' + group] && checklists[today]['tc_' + group][i])
@@ -714,7 +794,20 @@ export default function App() {
         </div>
         <div style={{ display: 'flex', gap: 0, overflowX: 'auto', padding: '0 12px', borderTop: `1px solid ${s.border}` }}>
           {TABS.map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', padding: '13px 16px', border: 'none', background: 'none', color: tab === t ? s.green : s.text3, borderBottom: `2px solid ${tab === t ? s.green : 'transparent'}`, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all .2s' }}>{t}</button>
+            <button key={t} onClick={() => setTab(t)} style={{ fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', padding: '13px 16px', border: 'none', background: 'none', color: tab === t ? (t === 'Gatekeeper' ? (gateIsLocked ? s.red : s.green) : s.green) : s.text3, borderBottom: `2px solid ${tab === t ? (t === 'Gatekeeper' && gateIsLocked ? s.red : s.green) : 'transparent'}`, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all .2s', position: 'relative' }}>
+              {t}
+              {t === 'Gatekeeper' && (
+                <span style={{
+                  display: 'inline-block',
+                  width: 7, height: 7,
+                  borderRadius: '50%',
+                  background: gateIsLocked ? s.red : s.green,
+                  marginLeft: 6,
+                  verticalAlign: 'middle',
+                  boxShadow: gateIsLocked ? `0 0 8px ${s.red}88` : `0 0 8px ${s.green}88`,
+                }} />
+              )}
+            </button>
           ))}
         </div>
       </div>
@@ -787,7 +880,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Filters */}
             <Card style={{ marginBottom: 14, padding: '12px 16px' }}>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 {[['Setup','setup',[''].concat(SETUPS)],['Day Type','dayType',['','Trend','Chop','Reversal']],['Outcome','outcome',['','win','loss','be']],['Rules','rules',['','yes','no','partial']]].map(([l,k,opts]) => (
@@ -1072,6 +1164,335 @@ export default function App() {
                 })()}
               </Card>
             </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════
+            ══ GATEKEEPER TAB ══
+            ══════════════════════════════════════════════════════ */}
+        {tab === 'Gatekeeper' && (
+          <div className="fade-in">
+
+            {/* Header row */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 10, height: 10, borderRadius: '50%',
+                  background: gateIsLocked ? s.red : s.green,
+                  boxShadow: `0 0 10px ${gateIsLocked ? s.red : s.green}88`,
+                }} />
+                <div style={{ fontFamily: 'Bebas Neue', fontSize: 22, letterSpacing: 3, color: gateIsLocked ? s.red : s.green }}>
+                  Trade Gatekeeper
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  fontFamily: 'Bebas Neue', fontSize: 32, letterSpacing: 1,
+                  color: gateTradeCount >= MAX_GATE_TRADES ? s.red : s.text,
+                  lineHeight: 1,
+                }}>
+                  {gateTradeCount}
+                </div>
+                <div style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: s.text3 }}>/ {MAX_GATE_TRADES} TRADES</div>
+              </div>
+            </div>
+            <div style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: s.text3, marginBottom: 20 }}>
+              Run this before EVERY trade — hard cap at {MAX_GATE_TRADES} trades, auto-lockout after {MAX_CONSEC_LOSSES} consecutive losses
+            </div>
+
+            {/* Trade slot indicators */}
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${MAX_GATE_TRADES}, 1fr)`, gap: 8, marginBottom: 24 }}>
+              {Array.from({ length: MAX_GATE_TRADES }).map((_, i) => {
+                const t = todayTrades.sort((a, b) => (a.time || '') > (b.time || '') ? 1 : -1)[i]
+                const col = !t ? s.border2 : t.outcome === 'win' ? s.green : t.outcome === 'loss' ? s.red : s.yellow
+                const bg2 = !t ? s.bg3 : t.outcome === 'win' ? 'rgba(0,229,160,0.06)' : t.outcome === 'loss' ? 'rgba(255,61,90,0.06)' : 'rgba(255,200,64,0.06)'
+                return (
+                  <div key={i} style={{ background: bg2, border: `1.5px solid ${col}`, borderRadius: 3, padding: '12px 14px', textAlign: 'center' }}>
+                    <div style={{ fontFamily: 'JetBrains Mono', fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: col, textTransform: 'uppercase' }}>
+                      {!t ? `TRADE ${i + 1}` : t.outcome === 'win' ? 'WIN' : t.outcome === 'loss' ? 'LOSS' : 'B/E'}
+                    </div>
+                    {t && (
+                      <div style={{ fontFamily: 'JetBrains Mono', fontSize: 9, color: s.text3, marginTop: 4 }}>
+                        {t.time} · {t.setup || '—'}
+                      </div>
+                    )}
+                    {t && t.pnl && (
+                      <div style={{ fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, color: Number(t.pnl) >= 0 ? s.green : s.red, marginTop: 3 }}>
+                        {fmt$(Number(t.pnl), true)}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* ── LOCKED STATE ── */}
+            {gateIsLocked && gatePhase !== 'approved' && (
+              <Card accent={s.red} style={{ textAlign: 'center', padding: '40px 30px' }}>
+                <div style={{ fontSize: 40, marginBottom: 14 }}>🛑</div>
+                <div style={{ fontFamily: 'Bebas Neue', fontSize: 26, letterSpacing: 3, color: s.red, marginBottom: 10 }}>
+                  {gateLossLocked ? '3 CONSECUTIVE LOSSES' : 'DAILY LIMIT REACHED'}
+                </div>
+                <div style={{ fontFamily: 'JetBrains Mono', fontSize: 12, color: s.text2, lineHeight: 1.8, maxWidth: 420, margin: '0 auto' }}>
+                  {gateLossLocked
+                    ? 'You\'ve hit 3 losses in a row. Step away. Review your journal. Come back tomorrow with a clear head.'
+                    : 'You\'ve used all 4 trades today. The best trade is the one you don\'t take. Close the platform and review your journal.'}
+                </div>
+                <div style={{ marginTop: 20, fontFamily: 'JetBrains Mono', fontSize: 11, color: s.text3 }}>
+                  Today's P&L: <span style={{ color: todayPnl >= 0 ? s.green : s.red, fontWeight: 700 }}>{fmt$(todayPnl, true)}</span>
+                </div>
+              </Card>
+            )}
+
+            {/* ── IDLE STATE ── */}
+            {!gateIsLocked && gatePhase === 'idle' && (
+              <div style={{ textAlign: 'center', padding: '30px 0' }}>
+                <button
+                  onClick={gateStartChecklist}
+                  style={{
+                    fontFamily: 'Bebas Neue', fontSize: 22, letterSpacing: 4,
+                    background: s.green, color: s.bg, border: 'none',
+                    borderRadius: 3, padding: '20px 48px', cursor: 'pointer',
+                    boxShadow: `0 4px 20px ${s.green}44`,
+                    transition: 'all .2s',
+                  }}
+                  onMouseEnter={e => e.target.style.boxShadow = `0 6px 28px ${s.green}66`}
+                  onMouseLeave={e => e.target.style.boxShadow = `0 4px 20px ${s.green}44`}
+                >
+                  Pre-Trade Checklist →
+                </button>
+                <div style={{ fontFamily: 'JetBrains Mono', fontSize: 11, color: s.text3, marginTop: 16 }}>
+                  {gateRemaining} trade{gateRemaining !== 1 ? 's' : ''} remaining
+                  {gateConsecLosses > 0 && <> · <span style={{ color: gateConsecLosses >= 2 ? s.yellow : s.text3 }}>{gateConsecLosses} consecutive loss{gateConsecLosses !== 1 ? 'es' : ''}</span></>}
+                </div>
+              </div>
+            )}
+
+            {/* ── CHECKLIST PHASE ── */}
+            {gatePhase === 'checklist' && (
+              <div className="fade-in">
+
+                {/* Status bar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                  <div style={{ flex: 1, height: 3, background: s.border, borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${(Object.values(gateChecked).filter(Boolean).length / GATE_RULES.length) * 100}%`,
+                      background: gateAllChecked ? s.green : s.blue,
+                      borderRadius: 2,
+                      transition: 'width .3s',
+                      boxShadow: gateAllChecked ? `0 0 6px ${s.green}66` : 'none',
+                    }} />
+                  </div>
+                  <div style={{ fontFamily: 'JetBrains Mono', fontSize: 11, color: gateAllChecked ? s.green : s.text2 }}>
+                    {Object.values(gateChecked).filter(Boolean).length} / {GATE_RULES.length}
+                  </div>
+                </div>
+
+                {/* Rules checklist */}
+                <Card accent={s.blue} style={{ marginBottom: 16 }}>
+                  <Lbl>Entry Rules</Lbl>
+                  {GATE_RULES.map(rule => {
+                    const chk = !!gateChecked[rule.id]
+                    return (
+                      <div
+                        key={rule.id}
+                        onClick={() => gateToggleRule(rule.id)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 12,
+                          padding: '10px 12px', borderRadius: 3, cursor: 'pointer',
+                          background: chk ? 'rgba(0,229,160,0.03)' : 'transparent',
+                          marginBottom: 2, userSelect: 'none',
+                          border: `1px solid ${chk ? 'rgba(0,229,160,0.12)' : 'transparent'}`,
+                          transition: 'all .15s',
+                        }}
+                      >
+                        <div style={{
+                          width: 16, height: 16, borderRadius: 2, flexShrink: 0,
+                          border: `1.5px solid ${chk ? s.green : s.border2}`,
+                          background: chk ? s.green : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 10, color: s.bg, transition: 'all .15s',
+                        }}>
+                          {chk ? '✓' : ''}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontFamily: 'JetBrains Mono', fontSize: 12, color: chk ? s.text3 : s.text2, textDecoration: chk ? 'line-through' : 'none', lineHeight: 1.4 }}>
+                            {rule.label}
+                          </div>
+                        </div>
+                        <span style={{
+                          fontFamily: 'JetBrains Mono', fontSize: 8, letterSpacing: 1.5,
+                          color: s.text3, textTransform: 'uppercase',
+                        }}>
+                          {rule.cat}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </Card>
+
+                {/* Emotion selection */}
+                <Card style={{ marginBottom: 16 }}>
+                  <Lbl>Emotional State — Be Honest</Lbl>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginTop: 8 }}>
+                    {GATE_EMOTIONS.map(emo => {
+                      const sel = gateEmotion === emo.id
+                      const col = emo.safe ? s.green : s.red
+                      return (
+                        <div
+                          key={emo.id}
+                          onClick={() => setGateEmotion(emo.id)}
+                          style={{
+                            padding: '14px 8px', borderRadius: 3, textAlign: 'center', cursor: 'pointer',
+                            background: sel ? `${col}12` : s.bg,
+                            border: `1.5px solid ${sel ? col : s.border}`,
+                            transition: 'all .15s',
+                          }}
+                        >
+                          <div style={{ fontSize: 20, marginBottom: 5 }}>{emo.icon}</div>
+                          <div style={{ fontFamily: 'JetBrains Mono', fontSize: 9, fontWeight: 700, letterSpacing: 1, color: sel ? col : s.text3 }}>
+                            {emo.label.toUpperCase()}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </Card>
+
+                {/* Quick thesis */}
+                <Card style={{ marginBottom: 20, padding: '12px 16px' }}>
+                  <Lbl>Quick Trade Thesis (optional)</Lbl>
+                  <textarea
+                    value={gateNotes}
+                    onChange={e => setGateNotes(e.target.value)}
+                    placeholder="What's the setup? Where's the stop? What's the target?"
+                    style={{
+                      background: s.bg, border: `1px solid ${s.border}`, borderRadius: 3,
+                      color: s.text, fontFamily: 'JetBrains Mono', fontSize: 12,
+                      padding: '8px 11px', outline: 'none', resize: 'vertical',
+                      minHeight: 50, width: '100%',
+                    }}
+                  />
+                </Card>
+
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <Btn variant="ghost" onClick={gateReset} style={{ flex: 1 }}>Cancel</Btn>
+                  <Btn
+                    onClick={gateHandleApprove}
+                    style={{
+                      flex: 2,
+                      background: gateAllChecked && gateEmotion ? (gateDangerEmo ? s.red : s.green) : s.border2,
+                      color: gateAllChecked && gateEmotion ? s.bg : s.text3,
+                      cursor: gateAllChecked && gateEmotion ? 'pointer' : 'not-allowed',
+                      opacity: gateAllChecked && gateEmotion ? 1 : 0.5,
+                    }}
+                  >
+                    {!gateAllChecked
+                      ? `${Object.values(gateChecked).filter(Boolean).length}/${GATE_RULES.length} RULES CHECKED`
+                      : !gateEmotion
+                      ? 'SELECT EMOTION'
+                      : gateDangerEmo
+                      ? `⚠ APPROVE DESPITE ${gateEmoObj.label.toUpperCase()}`
+                      : '✓ APPROVE TRADE'}
+                  </Btn>
+                </div>
+              </div>
+            )}
+
+            {/* ── WARNING PHASE (dangerous emotion) ── */}
+            {gatePhase === 'warning' && gateWarning && (
+              <Card accent={s.red} style={{ textAlign: 'center', padding: '36px 28px' }} className="fade-in">
+                <div style={{ fontSize: 40, marginBottom: 12 }}>{gateWarning.icon}</div>
+                <div style={{ fontFamily: 'Bebas Neue', fontSize: 24, letterSpacing: 3, color: s.red, marginBottom: 10 }}>
+                  You tagged yourself as "{gateWarning.label}"
+                </div>
+                <div style={{ fontFamily: 'JetBrains Mono', fontSize: 12, color: s.text2, lineHeight: 1.8, maxWidth: 440, margin: '0 auto 10px' }}>
+                  {gateWarning.warn}
+                </div>
+                <div style={{ fontFamily: 'Bebas Neue', fontSize: 18, letterSpacing: 2, color: s.red, margin: '20px 0 24px' }}>
+                  Are you SURE this isn't the trade you'll regret?
+                </div>
+                <div style={{ display: 'flex', gap: 14, justifyContent: 'center' }}>
+                  <Btn
+                    onClick={() => { setGatePhase('rejected'); showToast('Good call — trade skipped ✓') }}
+                    style={{ background: 'rgba(0,229,160,0.12)', color: s.green, border: `1.5px solid ${s.green}44`, padding: '12px 28px', fontSize: 11 }}
+                  >
+                    🧘 Walk Away (Smart Move)
+                  </Btn>
+                  <Btn
+                    variant="ghost"
+                    onClick={gateCommit}
+                    style={{ color: s.text3, fontSize: 10, padding: '12px 20px' }}
+                  >
+                    Override & Take Trade
+                  </Btn>
+                </div>
+              </Card>
+            )}
+
+            {/* ── APPROVED ── */}
+            {gatePhase === 'approved' && (
+              <Card accent={s.green} style={{ textAlign: 'center', padding: '36px 28px' }} className="fade-in">
+                <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+                <div style={{ fontFamily: 'Bebas Neue', fontSize: 24, letterSpacing: 3, color: s.green, marginBottom: 8 }}>
+                  Trade Approved
+                </div>
+                <div style={{ fontFamily: 'JetBrains Mono', fontSize: 12, color: s.text2, marginBottom: 24 }}>
+                  Execute your trade, then log it in the Journal tab.
+                </div>
+                <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                  <Btn onClick={() => {
+                    gateReset()
+                    setTab('Journal')
+                    setModal({ ...BLANK, date: today, time: new Date().toTimeString().slice(0, 5), dayType: curDT ? curDT.charAt(0).toUpperCase() + curDT.slice(1) : '', emotion: gateEmotion ? gateEmotion.charAt(0).toUpperCase() + gateEmotion.slice(1) : '' })
+                  }}>
+                    Log Trade →
+                  </Btn>
+                  <Btn variant="ghost" onClick={gateReset}>
+                    Back
+                  </Btn>
+                </div>
+              </Card>
+            )}
+
+            {/* ── REJECTED ── */}
+            {gatePhase === 'rejected' && (
+              <Card accent={s.blue} style={{ textAlign: 'center', padding: '36px 28px' }} className="fade-in">
+                <div style={{ fontSize: 40, marginBottom: 12 }}>🧘</div>
+                <div style={{ fontFamily: 'Bebas Neue', fontSize: 22, letterSpacing: 3, color: s.blue, marginBottom: 8 }}>
+                  Good Call — Trade Skipped
+                </div>
+                <div style={{ fontFamily: 'JetBrains Mono', fontSize: 12, color: s.text2, lineHeight: 1.8, marginBottom: 24 }}>
+                  The best trade is the one you don't take when conditions aren't right.
+                </div>
+                <Btn variant="ghost" onClick={gateReset}>Back to Gatekeeper</Btn>
+              </Card>
+            )}
+
+            {/* ── Session context at bottom ── */}
+            {todayTrades.length > 0 && gatePhase !== 'checklist' && (
+              <Card style={{ marginTop: 24, padding: '14px 18px' }}>
+                <Lbl>Today's Session</Lbl>
+                {todayTrades.sort((a, b) => (a.time || '') > (b.time || '') ? 1 : -1).map((t, i) => (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: `1px solid ${s.border}` }}>
+                    <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: s.text3, minWidth: 20 }}>#{i + 1}</span>
+                    <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: s.text3, minWidth: 44 }}>{t.time}</span>
+                    <span style={{ fontFamily: 'JetBrains Mono', fontSize: 11, color: s.text2, flex: 1 }}>{t.setup || '—'}</span>
+                    <span style={{ fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, color: Number(t.pnl) >= 0 ? s.green : s.red, minWidth: 70, textAlign: 'right' }}>
+                      {fmt$(Number(t.pnl), true)}
+                    </span>
+                    <Badge type={t.outcome}>{t.outcome === 'win' ? 'WIN' : t.outcome === 'loss' ? 'LOSS' : 'B/E'}</Badge>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 20, marginTop: 12, fontFamily: 'JetBrains Mono', fontSize: 10, color: s.text3 }}>
+                  <span>P&L: <span style={{ color: todayPnl >= 0 ? s.green : s.red, fontWeight: 700 }}>{fmt$(todayPnl, true)}</span></span>
+                  <span>Streak: <span style={{ color: gateConsecLosses >= 2 ? s.yellow : s.text3 }}>{gateConsecLosses} consecutive L{gateConsecLosses !== 1 ? 's' : ''}</span></span>
+                </div>
+              </Card>
+            )}
+
           </div>
         )}
 
