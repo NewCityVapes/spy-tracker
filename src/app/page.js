@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useTracker } from '../hooks/useTracker'
 
 // ── Constants ─────────────────────────────────────────────────
-const SETUPS = ['Buy the Dip','Overextension Fade','Support Bounce','Other']
+const SETUPS = ['Buy the Dip','Overextension Fade','Key Level','IAL-D','Other']
 const DAY_TYPES = ['UpTrend','DownTrend','Chop']
 const EMOTIONS = ['Calm','FOMO','Anxious','Revenge','Confident','Greedy']
 const TABS = ['Dashboard','Journal','Stats','Pre-Market','Checklist','Setups','Risk Calc','Gatekeeper']
